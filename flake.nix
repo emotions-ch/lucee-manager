@@ -164,6 +164,12 @@
                                 '.projects[$name].status = "running" | .projects[$name].lastSeen = $timestamp' \
                                 "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
               ;;
+            starting)
+              ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
+                                --arg timestamp "$(date -Iseconds)" \
+                                '.projects[$name].status = "starting" | .projects[$name].lastSeen = $timestamp' \
+                                "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+              ;;
             stopped)
               ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
                                 '.projects[$name].status = "stopped"' \
@@ -388,12 +394,150 @@ EOF
           chmod +x "$OUTPUT_DIR/stop-nginx.sh"
         '';
 
+        # Tomcat config updater - updates server.xml with assigned port
+        tomcatConfigUpdater = pkgs.writeShellScriptBin "lucee-update-tomcat-config" ''
+          set -euo pipefail
+          
+          PROJECT_PATH="$1"
+          HTTP_PORT="$2"
+          SHUTDOWN_PORT=$((HTTP_PORT + 1000))
+          
+          SERVER_XML="$PROJECT_PATH/lucee-instance/conf/server.xml"
+          
+          if [[ ! -f "$SERVER_XML" ]]; then
+            echo "Error: server.xml not found at $SERVER_XML"
+            exit 1
+          fi
+          
+          echo "Updating Tomcat configuration at $SERVER_XML"
+          echo "  HTTP Port: $HTTP_PORT"
+          echo "  Shutdown Port: $SHUTDOWN_PORT"
+          
+          # Backup original file
+          cp "$SERVER_XML" "$SERVER_XML.backup"
+          
+          # Update the HTTP connector port and shutdown port using sed
+          ${pkgs.gnused}/bin/sed -i "s/port=\"[0-9]*\" shutdown/port=\"$SHUTDOWN_PORT\" shutdown/g" "$SERVER_XML"
+          ${pkgs.gnused}/bin/sed -i "s/Connector port=\"[0-9]*\"/Connector port=\"$HTTP_PORT\"/g" "$SERVER_XML"
+          
+          echo "Tomcat configuration updated successfully"
+        '';
+
+        # Project starter - comprehensive start command
+        projectStarter = pkgs.writeShellScriptBin "lucee-start-project" ''
+          set -euo pipefail
+          
+          PROJECT_NAME="$1"
+          REGISTRY_FILE="$2"
+          
+          # Check if project exists in registry
+          if [[ ! -f "$REGISTRY_FILE" ]]; then
+            echo "Registry not found. Run 'lucee-manager scan' first."
+            exit 1
+          fi
+          
+          PROJECT_PATH=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].path // empty' "$REGISTRY_FILE")
+          if [[ -z "$PROJECT_PATH" ]]; then
+            echo "Project '$PROJECT_NAME' not found in registry."
+            echo "Run 'lucee-manager scan' to discover projects first."
+            exit 1
+          fi
+          
+          echo "Starting Lucee project: $PROJECT_NAME"
+          echo "Project path: $PROJECT_PATH"
+          
+          # Convert relative path to absolute
+          if [[ ! "$PROJECT_PATH" =~ ^/ ]]; then
+            PROJECT_PATH="$PWD/$PROJECT_PATH"
+          fi
+          
+          # Step 1: Assign port if not already assigned
+          CURRENT_PORT=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].port // empty' "$REGISTRY_FILE")
+          if [[ -z "$CURRENT_PORT" || "$CURRENT_PORT" == "null" ]]; then
+            echo "Step 1: Assigning port..."
+            PORT=$(lucee-port-allocate "$PROJECT_NAME" "$REGISTRY_FILE")
+            echo "  Assigned port: $PORT"
+          else
+            PORT="$CURRENT_PORT"
+            echo "Step 1: Using existing port assignment: $PORT"
+          fi
+          
+          # Step 2: Update Tomcat configuration
+          echo "Step 2: Updating Tomcat configuration..."
+          lucee-update-tomcat-config "$PROJECT_PATH" "$PORT"
+          
+          # Step 3: Generate nginx configuration
+          echo "Step 3: Generating nginx configuration..."
+          lucee-nginx-generate "$REGISTRY_FILE" "$HOME/.lucee-manager/nginx"
+          
+          # Step 4: Start nginx if not running
+          echo "Step 4: Ensuring nginx is running..."
+          if ! ${pkgs.procps}/bin/pgrep -f "nginx.*master.*lucee-manager" > /dev/null; then
+            echo "  Starting nginx..."
+            bash "$HOME/.lucee-manager/nginx/start-nginx.sh"
+          else
+            echo "  Nginx already running, reloading configuration..."
+            ${pkgs.nginx}/bin/nginx -s reload -c "$HOME/.lucee-manager/nginx/nginx.conf" 2>/dev/null || true
+          fi
+          
+          # Step 5: Update registry status to starting
+          echo "Step 5: Updating registry status..."
+          lucee-track-port "$PROJECT_NAME" "starting" "$REGISTRY_FILE"
+          
+          # Step 6: Start the Lucee project
+          echo "Step 6: Starting Lucee instance..."
+          echo "  Changing to project directory: $PROJECT_PATH"
+          cd "$PROJECT_PATH"
+          
+          echo "  Running: nix run ."
+          echo "  The Lucee instance will start shortly..."
+          echo ""
+          
+          # Get project info for final message
+          DOMAIN=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].domain' "$REGISTRY_FILE")
+          
+          echo "==================== Lucee Project Starting ===================="
+          echo "Project: $PROJECT_NAME"
+          echo "Port: $PORT"
+          echo "Domain: $DOMAIN"
+          echo "Direct access: http://localhost:$PORT"
+          echo "Proxy access: http://$DOMAIN:8080"
+          echo ""
+          echo "To check status: lucee-manager list"
+          echo "To stop: press Ctrl+C (then run: lucee-manager track $PROJECT_NAME stopped)"
+          echo "=============================================================="
+          echo ""
+          
+          # Start with nix run and update status when ready
+          {
+            nix run . &
+            NIX_PID=$!
+            
+            # Wait for the service to be ready and update status
+            echo "Waiting for Lucee to start..."
+            for i in {1..30}; do
+              if ${pkgs.nettools}/bin/netstat -tuln 2>/dev/null | grep -q ":$PORT "; then
+                echo "Lucee is ready!"
+                lucee-track-port "$PROJECT_NAME" "running" "$REGISTRY_FILE"
+                break
+              fi
+              sleep 2
+            done
+            
+            # Wait for the nix process to finish
+            wait $NIX_PID
+            
+            # Update status when process ends
+            lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+          }
+        '';
+
         # Main CLI interface
         luceeManager = pkgs.writeShellScriptBin "lucee-manager" ''
           set -euo pipefail
           
           # Add our tools to PATH
-          export PATH="${projectScanner}/bin:${portAllocator}/bin:${portTracker}/bin:${nginxGenerator}/bin:$PATH"
+          export PATH="${projectScanner}/bin:${portAllocator}/bin:${portTracker}/bin:${nginxGenerator}/bin:${tomcatConfigUpdater}/bin:${projectStarter}/bin:$PATH"
           
           COMMAND="''${1:-help}"
           REGISTRY_FILE="$HOME/.lucee-manager/registry.json"
@@ -477,10 +621,20 @@ EOF
                   echo "Usage: lucee-manager nginx {generate|start|stop|reload}"
                   exit 1
                   ;;
-              esac
-              ;;
-              
-            help|--help|-h)
+               esac
+               ;;
+               
+             start)
+               PROJECT_NAME="''${2:-}"
+               if [[ -z "$PROJECT_NAME" ]]; then
+                 echo "Usage: lucee-manager start <project-name>"
+                 exit 1
+               fi
+               
+               lucee-start-project "$PROJECT_NAME" "$REGISTRY_FILE"
+               ;;
+               
+             help|--help|-h)
               cat <<EOF
 Lucee Reverse Proxy Manager
 
@@ -497,13 +651,20 @@ Port Management:
   assign-port <project>    Assign an available port to a project
   track <project> <status> Update project status (running|stopped)
   
+Project Management:
+  start <project>          Complete startup: assign port, update config, start nginx, run project
+  
 Nginx Reverse Proxy:
   nginx generate           Generate nginx configuration for all projects
   nginx start              Start nginx reverse proxy on port 8080
   nginx stop               Stop nginx reverse proxy
   nginx reload             Reload nginx configuration
   
-Workflow:
+Simple Workflow (Recommended):
+  1. lucee-manager scan ~/projects     # Discover Lucee projects
+  2. lucee-manager start myapp         # One command to start everything!
+
+Manual Workflow:
   1. lucee-manager scan ~/projects     # Discover Lucee projects
   2. lucee-manager assign-port myapp   # Get port assignment
   3. Start your Lucee project manually on assigned port
@@ -512,6 +673,11 @@ Workflow:
   6. lucee-manager nginx start         # Start reverse proxy
 
 Examples:
+  # Simple workflow (recommended)
+  lucee-manager scan ~/code                    # Discover projects
+  lucee-manager start my-cms-project           # Start everything with one command
+  
+  # Manual workflow  
   lucee-manager scan ~/code
   lucee-manager assign-port my-cms-project  
   lucee-manager nginx generate
@@ -542,6 +708,8 @@ EOF
           lucee-port-allocate = portAllocator; 
           lucee-track-port = portTracker;
           lucee-nginx-generate = nginxGenerator;
+          lucee-update-tomcat-config = tomcatConfigUpdater;
+          lucee-start-project = projectStarter;
         };
 
         # Development shell
