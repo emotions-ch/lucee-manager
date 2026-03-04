@@ -108,7 +108,7 @@
                 reload)
                   if [[ -f /tmp/nginx.pid ]]; then
                     echo "Reloading nginx configuration..."
-                    ${pkgs.nginx}/bin/nginx -s reload
+                     ${pkgs.nginx}/bin/nginx -s reload -c "$HOME/.lucee-manager/nginx/nginx.conf"
                     echo "Nginx reloaded."
                   else
                     echo "Nginx not running. Start with 'lucee-manager nginx start'"

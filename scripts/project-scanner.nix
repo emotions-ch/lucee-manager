@@ -53,12 +53,12 @@ pkgs.writeShellScriptBin "lucee-scan" ''
         PROJECT_DOMAIN="$project_name.local"
       fi
       
-      # Calculate relative path from registry location to project
-      RELATIVE_PATH=$(realpath --relative-to="$(dirname "$REGISTRY_FILE")" "$project_dir")
+      # Get absolute path to project
+      ABSOLUTE_PATH=$(realpath "$project_dir")
       
       # Add/update project in registry
       ${pkgs.jq}/bin/jq --arg name "$project_name" \
-                        --arg path "$RELATIVE_PATH" \
+                        --arg path "$ABSOLUTE_PATH" \
                         --arg domain "$PROJECT_DOMAIN" \
                         --arg timestamp "$(date -Iseconds)" \
                         '.projects[$name] = {

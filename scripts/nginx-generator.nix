@@ -212,7 +212,7 @@ EOF
 #!/bin/bash
 if [[ -f /tmp/nginx.pid ]]; then
     echo "Stopping nginx..."
-    ${pkgs.nginx}/bin/nginx -s quit
+    ${pkgs.nginx}/bin/nginx -s quit -c "$OUTPUT_DIR/nginx.conf"
     echo "Nginx stopped."
 else
     echo "Nginx not running."

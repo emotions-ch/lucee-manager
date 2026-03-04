@@ -28,27 +28,21 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
     PROJECT_PATH="$PWD/$PROJECT_PATH"
   fi
   
-  # Step 1: Assign port if not already assigned
+  #Assign port if not already assigned
   CURRENT_PORT=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].port // empty' "$REGISTRY_FILE")
   if [[ -z "$CURRENT_PORT" || "$CURRENT_PORT" == "null" ]]; then
-    echo "Step 1: Assigning port..."
+    echo "Assigning port..."
     PORT=$(lucee-port-allocate "$PROJECT_NAME" "$REGISTRY_FILE")
     echo "  Assigned port: $PORT"
   else
     PORT="$CURRENT_PORT"
-    echo "Step 1: Using existing port assignment: $PORT"
+    echo "Using existing port assignment: $PORT"
   fi
   
-  # Step 2: Update Tomcat configuration
-  echo "Step 2: Updating Tomcat configuration..."
   lucee-update-tomcat-config "$PROJECT_PATH" "$PORT"
-  
-  # Step 3: Generate nginx configuration
-  echo "Step 3: Generating nginx configuration..."
   lucee-nginx-generate "$REGISTRY_FILE" "$HOME/.lucee-manager/nginx"
   
   # Step 4: Start nginx if not running
-  echo "Step 4: Ensuring nginx is running..."
   if ! ${pkgs.procps}/bin/pgrep -f "nginx.*master.*lucee-manager" > /dev/null; then
     echo "  Starting nginx..."
     bash "$HOME/.lucee-manager/nginx/start-nginx.sh"
@@ -57,15 +51,12 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
     ${pkgs.nginx}/bin/nginx -s reload -c "$HOME/.lucee-manager/nginx/nginx.conf" 2>/dev/null || true
   fi
   
-  # Step 5: Update registry status to starting
-  echo "Step 5: Updating registry status..."
+  echo "Updating registry status..."
   lucee-track-port "$PROJECT_NAME" "starting" "$REGISTRY_FILE"
   
-  echo "Step 6: Starting Lucee instance in background..."
-  echo "  Changing to project directory: $PROJECT_PATH"
   cd "$PROJECT_PATH"
   
-  echo "  Running: nix run . (in background)"
+  echo "Running: nix run $PROJECT_PATH"
   
   # Create logs directory
   mkdir -p "$HOME/.lucee-manager/logs"
@@ -75,13 +66,10 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   nohup nix run . > "$LOG_FILE" 2>&1 &
   NIX_PID=$!
   
-  echo "  Started with PID: $NIX_PID"
-  echo "  Logs: $LOG_FILE"
-  echo ""
-  
   # Get project info for final message
   DOMAIN=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].domain' "$REGISTRY_FILE")
-  
+
+  echo ""
   echo "==================== Lucee Project Starting ===================="
   echo "Project: $PROJECT_NAME"
   echo "Port: $PORT"
