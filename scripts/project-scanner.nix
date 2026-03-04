@@ -71,9 +71,16 @@ pkgs.writeShellScriptBin "lucee-scan" ''
         PROJECT_DOMAIN="$project_name.local"
       fi
       
-      # Get absolute path to project
       ABSOLUTE_PATH=$(realpath "$project_dir")
       
+      CURRENT_STATUS=$(${pkgs.jq}/bin/jq -r --arg name "$project_name" '.projects[$name].status // "stopped"' "$REGISTRY_FILE" 2>/dev/null || echo "stopped")
+      if [[ "$CURRENT_STATUS" == "running" ]]; then
+        echo "  -> Project is currently running, stopping before registry update..."
+        lucee-stop-project "$project_name" "$REGISTRY_FILE" || {
+          echo "  -> Warning: Failed to stop project, continuing with registry update"
+        }
+      fi
+
       # Add/update project in registry
       ${pkgs.jq}/bin/jq --arg name "$project_name" \
                         --arg path "$ABSOLUTE_PATH" \

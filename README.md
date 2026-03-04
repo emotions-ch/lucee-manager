@@ -6,7 +6,7 @@ Automatically manages nginx reverse proxy for multiple Lucee dev instances creat
 
 ## lucee-manager.json
 
-Each Lucee project can optionally include a `lucee-instance/conf/lucee-manager.json` file to customize its configuration. This file is read during project scanning and the settings are stored in the registry, so if any changes are made you will have to scan the project again.
+Each Lucee project can optionally include a `lucee-instance/conf/lucee-manager.json` file to customize its configuration. This file is read during project scanning and the settings are stored in the registry, so if any changes are made you will have to scan the project again. **Note**: Running projects are automatically stopped before registry updates to ensure consistency.
 
 | Field | Type | Description | Example | Default |
 |-------|------|-------------|---------|---------|

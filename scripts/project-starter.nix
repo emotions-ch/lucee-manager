@@ -78,9 +78,6 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   echo "Direct access: http://localhost:$PORT"
   echo "Proxy access: http://$DOMAIN:8080"
   echo "Logs: $LOG_FILE"
-  echo ""
-  echo "To check status: lucee-manager list"
-  echo "To stop: lucee-manager stop $PROJECT_NAME"
   echo "=============================================================="
   echo ""
   
