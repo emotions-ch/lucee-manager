@@ -150,39 +150,14 @@ EOF
     project_domain=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.value.domain')
     project_port=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.value.port')
     
-    cat > "$OUTPUT_DIR/sites/$project_name.conf" <<EOF
-server {
-    listen 8080;
-    server_name $project_domain;
+    # Generate server configuration from template
+    cp "${../scripts/templates/nginx/server.conf}" "$OUTPUT_DIR/sites/$project_name.conf"
     
-    # CFML-specific settings
-    client_max_body_size 100m;
-    proxy_read_timeout 300;
-    proxy_connect_timeout 30;
-    proxy_send_timeout 300;
-    
-    location / {
-        proxy_pass http://127.0.0.1:$project_port;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        
-        # Handle WebSocket upgrades
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        
-        # Caching for static assets
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-            proxy_pass http://127.0.0.1:$project_port;
-            proxy_set_header Host \$host;
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-    }
-}
-EOF
+    # Replace placeholders
+    ${pkgs.gnused}/bin/sed -i \
+      -e "s/SERVERNAME/$project_domain/g" \
+      -e "s/LUCEE_PORT/$project_port/g" \
+      "$OUTPUT_DIR/sites/$project_name.conf"
   done
   
   # Generate start script
