@@ -36,7 +36,7 @@ pkgs.writeShellScriptBin "lucee-scan" ''
         # Read project name and domain from config file
         CONFIGURED_NAME=$(${pkgs.jq}/bin/jq -r '.projectName // .project // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
         CONFIGURED_DOMAIN=$(${pkgs.jq}/bin/jq -r '.domain // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-        TEMPLATE_PATH=$(${pkgs.jq}/bin/jq -r '.template // .nginx.templateFile // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
+        TEMPLATE_PATH=$(${pkgs.jq}/bin/jq -r '.nginx.templateFile // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
         
         if [[ -n "$CONFIGURED_NAME" ]]; then
           echo "  -> Using configured project name: $CONFIGURED_NAME"

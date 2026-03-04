@@ -2,7 +2,45 @@ Lucee Reverse Proxy Manager CLI
 
 Automatically manages nginx reverse proxy for multiple Lucee dev instances created using [lucee-nix](https://github.com/emotions-ch/lucee-nix/blob/main/examples/devshell.nix).
 
-# Usage
+# instance Configuration
+
+## lucee-manager.json
+
+Each Lucee project can optionally include a `lucee-instance/conf/lucee-manager.json` file to customize its configuration. This file is read during project scanning and the settings are stored in the registry, so if any changes are made you will have to scan the project again.
+
+| Field | Type | Description | Example | Default |
+|-------|------|-------------|---------|---------|
+| `project` | String | Project name used in registry and commands | `"my-cms-project"` | Directory name |
+| `domain` | String | Custom domain for nginx reverse proxy | `"myapp.local"` | `"<project>.local"` |
+| `nginx.templateFile` | String | Alternative nested field for nginx template path | `"/absolute/path/to/template.conf"` | Uses default template |
+
+### Configuration Examples
+
+**Basic Configuration:**
+```json
+{
+  "project": "my-cms-project",
+  "domain": "mycms.devlocal.example.com"
+}
+```
+**With Custom Template:**
+```json
+{
+  "project": "my-cms-project",
+  "domain": "mycms.devlocal.example.com", 
+  "nginx": {
+    "templateFile": "/nix/store/path/to/template.conf"
+  }
+}
+```
+
+### Custom Nginx Templates
+
+Custom nginx templates support placeholder substitution:
+- `SERVERNAME` → Replaced with the project's domain
+- `LUCEE_PORT` → Replaced with the assigned port number
+
+# CLI-Usage
 `lucee-manager <command> [options]`
 
 ## Project Discovery
@@ -47,3 +85,4 @@ _you shouldnt need to touch any of these but who knows_
 - Logs: `~/.lucee-manager/logs`
 - Nginx: `~/.lucee-manager/nginx`
 - Registry: `~/.lucee-manager/registry.json`
+
