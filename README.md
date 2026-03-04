@@ -1,6 +1,6 @@
-Lucee Reverse Proxy Manager
+Lucee Reverse Proxy Manager CLI
 
-Automatically manages nginx reverse proxy for multiple Lucee instances.
+Automatically manages nginx reverse proxy for multiple Lucee dev instances created using [lucee-nix](https://github.com/emotions-ch/lucee-nix/blob/main/examples/devshell.nix).
 
 Usage:
   lucee-manager <command> [options]
@@ -23,29 +23,16 @@ Nginx Reverse Proxy:
   nginx stop               Stop nginx reverse proxy
   nginx reload             Reload nginx configuration
   
-Simple Workflow (Recommended):
-  1. lucee-manager scan ~/projects     # Discover Lucee projects
-  2. lucee-manager start myapp         # One command to start everything!
+# Simple workflow (recommended)
+`lucee-manager scan ~/code`                   # Discover projects
+`lucee-manager start my-cms-project`          # Start everything with one command
+`lucee-manager stop my-cms-project`           # Stop the project cleanly
 
-Manual Workflow:
-  1. lucee-manager scan ~/projects     # Discover Lucee projects
-  2. lucee-manager assign-port myapp   # Get port assignment
-  3. Start your Lucee project manually on assigned port
-  4. lucee-manager track myapp running # Mark as running
-  5. lucee-manager nginx generate      # Generate reverse proxy config
-  6. lucee-manager nginx start         # Start reverse proxy
-
-Examples:
-  # Simple workflow (recommended)
-  lucee-manager scan ~/code                    # Discover projects
-  lucee-manager start my-cms-project           # Start everything with one command
-  lucee-manager stop my-cms-project            # Stop the project cleanly
-  
-  # Manual workflow  
-  lucee-manager scan ~/code
-  lucee-manager assign-port my-cms-project  
-  lucee-manager nginx generate
-  lucee-manager nginx start
+# Manual workflow
+`lucee-manager scan ~/code`
+`lucee-manager assign-port my-cms-project`
+`lucee-manager nginx generate`
+`lucee-manager nginx start`
 
 Access projects via: http://project-name.local:8080
 Direct access via: http://localhost:PORT
