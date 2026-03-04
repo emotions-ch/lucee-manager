@@ -142,7 +142,7 @@
               ;;
               
             help|--help|-h)
-              cat ${./README.md}
+              ${pkgs.lib.getExe pkgs.glow} ${./README.md}
               ;;
               
             *)
