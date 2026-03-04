@@ -60,6 +60,7 @@
                 (if .value.pid then "\n    PID: \(.value.pid)" else "" end) +
                 "\n    Domain: \(.value.domain)" + 
                 "\n    Path: \(.value.path)" + 
+                (if .value.nginxTemplate then "\n    Nginx Template: \(.value.nginxTemplate)" else "\n    Template: default" end) +
                 (if .value.port then "\n    Direct: http://localhost:\(.value.port)" else "" end) +
                 (if .value.port then "\n    Proxy: http://\(.value.domain):8080" else "" end) +
                 "\n"' "$REGISTRY_FILE"

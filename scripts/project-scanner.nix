@@ -36,6 +36,7 @@ pkgs.writeShellScriptBin "lucee-scan" ''
         # Read project name and domain from config file
         CONFIGURED_NAME=$(${pkgs.jq}/bin/jq -r '.projectName // .project // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
         CONFIGURED_DOMAIN=$(${pkgs.jq}/bin/jq -r '.domain // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
+        TEMPLATE_PATH=$(${pkgs.jq}/bin/jq -r '.template // .nginx.templateFile // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
         
         if [[ -n "$CONFIGURED_NAME" ]]; then
           echo "  -> Using configured project name: $CONFIGURED_NAME"
@@ -47,6 +48,23 @@ pkgs.writeShellScriptBin "lucee-scan" ''
           PROJECT_DOMAIN="$CONFIGURED_DOMAIN"
         else
           PROJECT_DOMAIN="$project_name.local"
+        fi
+
+        if [[ -n "$TEMPLATE_PATH" ]]; then
+          echo "  -> Found nginx template: $TEMPLATE_PATH"
+          # Handle absolute paths directly, relative paths are relative to project directory
+          if [[ "$TEMPLATE_PATH" =~ ^/ ]]; then
+            NGINX_TEMPLATE="$TEMPLATE_PATH"
+          else
+            NGINX_TEMPLATE="$(realpath "$project_dir/$TEMPLATE_PATH")"
+          fi
+
+          if [[ -f "$NGINX_TEMPLATE" ]]; then
+            echo "  -> Nginx template verified: $NGINX_TEMPLATE"
+          else
+            echo "  -> Warning: Nginx template not found: $NGINX_TEMPLATE"
+            NGINX_TEMPLATE=""
+          fi
         fi
       else
         echo "  -> No lucee-manager.json found, using defaults"
@@ -61,11 +79,15 @@ pkgs.writeShellScriptBin "lucee-scan" ''
                         --arg path "$ABSOLUTE_PATH" \
                         --arg domain "$PROJECT_DOMAIN" \
                         --arg timestamp "$(date -Iseconds)" \
+                        --arg template "$NGINX_TEMPLATE" \
                         '.projects[$name] = {
                           path: $path,
                           discovered: $timestamp,
                           domain: $domain
-                        } | .projects[$name] = (.projects[$name] + {status: (.projects[$name].status // "stopped")}) | .lastScan = $timestamp' \
+                        } | 
+                        (if $template != "" then .projects[$name].nginxTemplate = $template else . end) |
+                        .projects[$name] = (.projects[$name] + {status: (.projects[$name].status // "stopped")}) | 
+                        .lastScan = $timestamp' \
                         "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
       
       mv "$REGISTRY_FILE.tmp" "$REGISTRY_FILE"

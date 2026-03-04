@@ -28,28 +28,17 @@ pkgs.writeShellScriptBin "lucee-nginx-generate" ''
     project_name=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.key')
     project_domain=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.value.domain')
     project_port=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.value.port')
-    project_path=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.value.path')
+    project_template=$(echo "$project_data" | ${pkgs.jq}/bin/jq -r '.value.nginxTemplate // empty')
     
-    # Check for custom template in project's lucee-manager.json
-    TEMPLATE_PATH="${../scripts/templates/nginx/server.conf}"  # default template
-    CONFIG_FILE="$project_path/lucee-instance/conf/lucee-manager.json"
-    
-    if [[ -f "$CONFIG_FILE" ]]; then
-      CUSTOM_TEMPLATE=$(${pkgs.jq}/bin/jq -r '.template // .nginx.templateFile // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-      if [[ -n "$CUSTOM_TEMPLATE" ]]; then
-        if [[ "$CUSTOM_TEMPLATE" =~ ^/ ]]; then
-          CUSTOM_TEMPLATE_PATH="$CUSTOM_TEMPLATE"
-        else
-          CUSTOM_TEMPLATE_PATH="$project_path/$CUSTOM_TEMPLATE"
-        fi
-        
-        if [[ -f "$CUSTOM_TEMPLATE_PATH" ]]; then
-          echo "  -> Using custom template for $project_name: $CUSTOM_TEMPLATE"
-          TEMPLATE_PATH="$CUSTOM_TEMPLATE_PATH"
-        else
-          echo "  -> Warning: Custom template not found for $project_name: $CUSTOM_TEMPLATE_PATH"
-          echo "  -> Falling back to default template"
-        fi
+    # Use custom template if available in registry, otherwise use default
+    if [[ -n "$project_template" && -f "$project_template" ]]; then
+      echo "  -> Using custom template for $project_name: $project_template"
+      TEMPLATE_PATH="$project_template"
+    else
+      TEMPLATE_PATH="${../scripts/templates/nginx/server.conf}"
+      if [[ -n "$project_template" ]]; then
+        echo "  -> Warning: Custom template not found for $project_name: $project_template"
+        echo "  -> Falling back to default template"
       fi
     fi
     
