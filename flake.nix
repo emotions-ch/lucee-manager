@@ -149,8 +149,9 @@
           set -euo pipefail
           
           PROJECT_NAME="$1"
-          ACTION="''${2:-running}"  # running, stopped
+          ACTION="''${2:-running}"  # running, starting, stopped
           REGISTRY_FILE="''${3:-$HOME/.lucee-manager/registry.json}"
+          PID="''${4:-}"  # Optional PID for running status
           
           if [[ ! -f "$REGISTRY_FILE" ]]; then
             echo "Registry not found."
@@ -159,10 +160,18 @@
           
           case "$ACTION" in
             running)
-              ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
-                                --arg timestamp "$(date -Iseconds)" \
-                                '.projects[$name].status = "running" | .projects[$name].lastSeen = $timestamp' \
-                                "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+              if [[ -n "$PID" ]]; then
+                ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
+                                  --arg timestamp "$(date -Iseconds)" \
+                                  --arg pid "$PID" \
+                                  '.projects[$name].status = "running" | .projects[$name].lastSeen = $timestamp | .projects[$name].pid = ($pid | tonumber)' \
+                                  "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+              else
+                ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
+                                  --arg timestamp "$(date -Iseconds)" \
+                                  '.projects[$name].status = "running" | .projects[$name].lastSeen = $timestamp' \
+                                  "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+              fi
               ;;
             starting)
               ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
@@ -172,7 +181,7 @@
               ;;
             stopped)
               ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
-                                '.projects[$name].status = "stopped"' \
+                                '.projects[$name].status = "stopped" | del(.projects[$name].pid)' \
                                 "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
               ;;
             *)
@@ -416,11 +425,89 @@ EOF
           # Backup original file
           cp "$SERVER_XML" "$SERVER_XML.backup"
           
-          # Update the HTTP connector port and shutdown port using sed
-          ${pkgs.gnused}/bin/sed -i "s/port=\"[0-9]*\" shutdown/port=\"$SHUTDOWN_PORT\" shutdown/g" "$SERVER_XML"
-          ${pkgs.gnused}/bin/sed -i "s/Connector port=\"[0-9]*\"/Connector port=\"$HTTP_PORT\"/g" "$SERVER_XML"
+          # Update the shutdown port in the Server element
+          ${pkgs.gnused}/bin/sed -i "s/<Server port=\"[0-9]*\"/<Server port=\"$SHUTDOWN_PORT\"/g" "$SERVER_XML"
+          
+          # Update the HTTP connector port (looking for port="NNNN" in Connector elements)
+          ${pkgs.gnused}/bin/sed -i "s/port=\"[0-9]*\" protocol=\"HTTP\/1\.1\"/port=\"$HTTP_PORT\" protocol=\"HTTP\/1.1\"/g" "$SERVER_XML"
           
           echo "Tomcat configuration updated successfully"
+          
+          # Verify the changes
+          echo "Verification:"
+          echo "  Server shutdown port: $(${pkgs.gnugrep}/bin/grep -o '<Server port="[0-9]*"' "$SERVER_XML" || echo "Not found")"
+          echo "  HTTP connector port: $(${pkgs.gnugrep}/bin/grep -o 'port="[0-9]*" protocol="HTTP/1\.1"' "$SERVER_XML" || echo "Not found")"
+        '';
+
+        # Project stopper - stops a running Lucee instance
+        projectStopper = pkgs.writeShellScriptBin "lucee-stop-project" ''
+          set -euo pipefail
+          
+          PROJECT_NAME="$1"
+          REGISTRY_FILE="$2"
+          
+          # Check if project exists in registry
+          if [[ ! -f "$REGISTRY_FILE" ]]; then
+            echo "Registry not found."
+            exit 1
+          fi
+          
+          # Get project info
+          PID=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].pid // empty' "$REGISTRY_FILE")
+          STATUS=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].status // empty' "$REGISTRY_FILE")
+          
+          if [[ -z "$PID" ]]; then
+            echo "No PID found for project '$PROJECT_NAME'. It may not be running."
+            if [[ "$STATUS" != "stopped" ]]; then
+              echo "Updating status to stopped..."
+              lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+            fi
+            exit 0
+          fi
+          
+          echo "Stopping Lucee project: $PROJECT_NAME (PID: $PID)"
+          
+          # Check if process is actually running
+          if ! ${pkgs.procps}/bin/ps -p "$PID" > /dev/null 2>&1; then
+            echo "Process $PID is not running. Cleaning up registry..."
+            lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+            exit 0
+          fi
+          
+          # Try graceful shutdown first (SIGTERM)
+          echo "Sending SIGTERM to process $PID..."
+          if ${pkgs.coreutils}/bin/kill -TERM "$PID" 2>/dev/null; then
+            echo "Waiting for graceful shutdown..."
+            for i in {1..30}; do
+              if ! ${pkgs.procps}/bin/ps -p "$PID" > /dev/null 2>&1; then
+                echo "Process stopped gracefully."
+                lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+                echo "Project '$PROJECT_NAME' stopped successfully."
+                exit 0
+              fi
+              sleep 1
+            done
+            
+            # If still running after 30 seconds, force kill
+            echo "Process still running after 30 seconds. Force killing..."
+            if ${pkgs.coreutils}/bin/kill -KILL "$PID" 2>/dev/null; then
+              sleep 2
+              if ! ${pkgs.procps}/bin/ps -p "$PID" > /dev/null 2>&1; then
+                echo "Process force killed."
+                lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+                echo "Project '$PROJECT_NAME' stopped successfully (force killed)."
+              else
+                echo "Failed to stop process $PID"
+                exit 1
+              fi
+            else
+              echo "Failed to kill process $PID - it may have already stopped"
+              lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+            fi
+          else
+            echo "Failed to send SIGTERM to process $PID - it may have already stopped"
+            lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+          fi
         '';
 
         # Project starter - comprehensive start command
@@ -484,13 +571,22 @@ EOF
           echo "Step 5: Updating registry status..."
           lucee-track-port "$PROJECT_NAME" "starting" "$REGISTRY_FILE"
           
-          # Step 6: Start the Lucee project
-          echo "Step 6: Starting Lucee instance..."
+          echo "Step 6: Starting Lucee instance in background..."
           echo "  Changing to project directory: $PROJECT_PATH"
           cd "$PROJECT_PATH"
           
-          echo "  Running: nix run ."
-          echo "  The Lucee instance will start shortly..."
+          echo "  Running: nix run . (in background)"
+          
+          # Create logs directory
+          mkdir -p "$HOME/.lucee-manager/logs"
+          LOG_FILE="$HOME/.lucee-manager/logs/$PROJECT_NAME.log"
+          
+          # Start Lucee in background and capture PID
+          nohup nix run . > "$LOG_FILE" 2>&1 &
+          NIX_PID=$!
+          
+          echo "  Started with PID: $NIX_PID"
+          echo "  Logs: $LOG_FILE"
           echo ""
           
           # Get project info for final message
@@ -500,36 +596,40 @@ EOF
           echo "Project: $PROJECT_NAME"
           echo "Port: $PORT"
           echo "Domain: $DOMAIN"
+          echo "PID: $NIX_PID"
           echo "Direct access: http://localhost:$PORT"
           echo "Proxy access: http://$DOMAIN:8080"
+          echo "Logs: $LOG_FILE"
           echo ""
           echo "To check status: lucee-manager list"
-          echo "To stop: press Ctrl+C (then run: lucee-manager track $PROJECT_NAME stopped)"
+          echo "To stop: lucee-manager stop $PROJECT_NAME"
           echo "=============================================================="
           echo ""
           
-          # Start with nix run and update status when ready
-          {
-            nix run . &
-            NIX_PID=$!
+          # Wait for the service to be ready and update status with PID
+          echo "Waiting for Lucee to start..."
+          for i in {1..30}; do
+            if ${pkgs.nettools}/bin/netstat -tuln 2>/dev/null | grep -q ":$PORT "; then
+              echo "Lucee is ready!"
+              lucee-track-port "$PROJECT_NAME" "running" "$REGISTRY_FILE" "$NIX_PID"
+              echo "Project '$PROJECT_NAME' is now running in background."
+              exit 0
+            fi
             
-            # Wait for the service to be ready and update status
-            echo "Waiting for Lucee to start..."
-            for i in {1..30}; do
-              if ${pkgs.nettools}/bin/netstat -tuln 2>/dev/null | grep -q ":$PORT "; then
-                echo "Lucee is ready!"
-                lucee-track-port "$PROJECT_NAME" "running" "$REGISTRY_FILE"
-                break
-              fi
-              sleep 2
-            done
+            # Check if process is still running
+            if ! ${pkgs.procps}/bin/ps -p "$NIX_PID" > /dev/null 2>&1; then
+              echo "Process $NIX_PID stopped unexpectedly. Check logs: $LOG_FILE"
+              lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+              exit 1
+            fi
             
-            # Wait for the nix process to finish
-            wait $NIX_PID
-            
-            # Update status when process ends
-            lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
-          }
+            sleep 2
+          done
+          
+          # If we get here, timeout occurred
+          echo "Timeout waiting for Lucee to start on port $PORT"
+          echo "Process PID $NIX_PID may still be starting. Check logs: $LOG_FILE"
+          echo "Run 'lucee-manager list' to check status"
         '';
 
         # Main CLI interface
@@ -537,7 +637,7 @@ EOF
           set -euo pipefail
           
           # Add our tools to PATH
-          export PATH="${projectScanner}/bin:${portAllocator}/bin:${portTracker}/bin:${nginxGenerator}/bin:${tomcatConfigUpdater}/bin:${projectStarter}/bin:$PATH"
+          export PATH="${projectScanner}/bin:${portAllocator}/bin:${portTracker}/bin:${nginxGenerator}/bin:${tomcatConfigUpdater}/bin:${projectStarter}/bin:${projectStopper}/bin:$PATH"
           
           COMMAND="''${1:-help}"
           REGISTRY_FILE="$HOME/.lucee-manager/registry.json"
@@ -561,6 +661,7 @@ EOF
                 "  \(.key):" + 
                 "\n    Port: \(.value.port // "not assigned")" + 
                 "\n    Status: \(.value.status // "unknown")" + 
+                (if .value.pid then "\n    PID: \(.value.pid)" else "" end) +
                 "\n    Domain: \(.value.domain)" + 
                 "\n    Path: \(.value.path)" + 
                 (if .value.port then "\n    Direct: http://localhost:\(.value.port)" else "" end) +
@@ -634,6 +735,16 @@ EOF
                lucee-start-project "$PROJECT_NAME" "$REGISTRY_FILE"
                ;;
                
+             stop)
+               PROJECT_NAME="''${2:-}"
+               if [[ -z "$PROJECT_NAME" ]]; then
+                 echo "Usage: lucee-manager stop <project-name>"
+                 exit 1
+               fi
+               
+               lucee-stop-project "$PROJECT_NAME" "$REGISTRY_FILE"
+               ;;
+               
              help|--help|-h)
               cat <<EOF
 Lucee Reverse Proxy Manager
@@ -653,6 +764,7 @@ Port Management:
   
 Project Management:
   start <project>          Complete startup: assign port, update config, start nginx, run project
+  stop <project>           Stop running project and update status
   
 Nginx Reverse Proxy:
   nginx generate           Generate nginx configuration for all projects
@@ -676,6 +788,7 @@ Examples:
   # Simple workflow (recommended)
   lucee-manager scan ~/code                    # Discover projects
   lucee-manager start my-cms-project           # Start everything with one command
+  lucee-manager stop my-cms-project            # Stop the project cleanly
   
   # Manual workflow  
   lucee-manager scan ~/code
@@ -710,6 +823,7 @@ EOF
           lucee-nginx-generate = nginxGenerator;
           lucee-update-tomcat-config = tomcatConfigUpdater;
           lucee-start-project = projectStarter;
+          lucee-stop-project = projectStopper;
         };
 
         # Development shell
@@ -724,6 +838,9 @@ EOF
             portAllocator
             portTracker
             nginxGenerator
+            tomcatConfigUpdater
+            projectStarter
+            projectStopper
           ];
 
           shellHook = ''
