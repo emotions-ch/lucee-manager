@@ -6,7 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -36,7 +36,7 @@
         tomcatConfigUpdater = import ./scripts/tomcat-config-updater.nix { inherit pkgs; };
         projectStarter = import ./scripts/project-starter.nix { inherit pkgs; inherit conf; };
         projectStopper = import ./scripts/project-stopper.nix { inherit pkgs; };
-        
+
         # Main CLI tool that imports all other scripts
         luceeManager = pkgs.writeShellScriptBin "lucee-manager" ''
           set -euo pipefail
@@ -190,11 +190,11 @@
           buildInputs = with pkgs; [
             jq
             nginx
-            iproute2  # for ss command
-            procps    # for ps, pgrep commands
-            nettools  # for netstat (fallback)
-            gnused    # for sed
-            gnugrep   # for grep
+            iproute2 # for ss command
+            procps # for ps, pgrep commands
+            nettools # for netstat (fallback)
+            gnused # for sed
+            gnugrep # for grep
             coreutils # for kill
             # All our tools
             luceeManager
