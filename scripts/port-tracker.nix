@@ -1,15 +1,14 @@
 # Port tracker - updates project status and PID tracking
-{ pkgs }:
+{ pkgs, conf }:
 
 pkgs.writeShellScriptBin "lucee-track-port" ''
   set -euo pipefail
   
   PROJECT_NAME="$1"
   ACTION="''${2:-running}"  # running, starting, stopped
-  REGISTRY_FILE="''${3:-$HOME/.lucee-manager/registry.json}"
   PID="''${4:-}"  # Optional PID for running status
   
-  if [[ ! -f "$REGISTRY_FILE" ]]; then
+  if [[ ! -f "${conf.reg.path}" ]]; then
     echo "Registry not found."
     exit 1
   fi
@@ -21,24 +20,24 @@ pkgs.writeShellScriptBin "lucee-track-port" ''
                           --arg timestamp "$(date -Iseconds)" \
                           --arg pid "$PID" \
                           '.projects[$name].status = "running" | .projects[$name].lastSeen = $timestamp | .projects[$name].pid = ($pid | tonumber)' \
-                          "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+                          "${conf.reg.path}" > "${conf.reg.path}.tmp"
       else
         ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
                           --arg timestamp "$(date -Iseconds)" \
                           '.projects[$name].status = "running" | .projects[$name].lastSeen = $timestamp' \
-                          "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+                          "${conf.reg.path}" > "${conf.reg.path}.tmp"
       fi
       ;;
     starting)
       ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
                         --arg timestamp "$(date -Iseconds)" \
                         '.projects[$name].status = "starting" | .projects[$name].lastSeen = $timestamp' \
-                        "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+                        "${conf.reg.path}" > "${conf.reg.path}.tmp"
       ;;
     stopped)
       ${pkgs.jq}/bin/jq --arg name "$PROJECT_NAME" \
                         '.projects[$name].status = "stopped" | del(.projects[$name].pid)' \
-                        "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+                        "${conf.reg.path}" > "${conf.reg.path}.tmp"
       ;;
     *)
       echo "Invalid action: $ACTION"
@@ -46,5 +45,5 @@ pkgs.writeShellScriptBin "lucee-track-port" ''
       ;;
   esac
   
-  mv "$REGISTRY_FILE.tmp" "$REGISTRY_FILE"
+  mv "${conf.reg.path}.tmp" "${conf.reg.path}"
 ''

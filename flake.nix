@@ -11,13 +11,30 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
+        conf = {
+          baseDir = "$HOME/.lucee-manager";
+          nginx = "${conf.baseDir}/nginx";
+          logs = "${conf.baseDir}/logs";
+          reg = {
+            path = "${conf.baseDir}/registry.json";
+            template = "${builtins.toJSON {
+              projects = { };
+              lastScan = null;
+              portRange = {
+                start = 8100;
+                end = 8199;
+              };
+            }}";
+          };
+        };
+
         # Import all our scripts
-        projectScanner = import ./scripts/project-scanner.nix { inherit pkgs; };
-        portAllocator = import ./scripts/port-allocator.nix { inherit pkgs; };
-        portTracker = import ./scripts/port-tracker.nix { inherit pkgs; };
-        nginxGenerator = import ./scripts/nginx-generator.nix { inherit pkgs; };
+        projectScanner = import ./scripts/project-scanner.nix { inherit pkgs; inherit conf; };
+        portAllocator = import ./scripts/port-allocator.nix { inherit pkgs; inherit conf; };
+        portTracker = import ./scripts/port-tracker.nix { inherit pkgs; inherit conf; };
+        nginxGenerator = import ./scripts/nginx-generator.nix { inherit pkgs; inherit conf; };
         tomcatConfigUpdater = import ./scripts/tomcat-config-updater.nix { inherit pkgs; };
-        projectStarter = import ./scripts/project-starter.nix { inherit pkgs; };
+        projectStarter = import ./scripts/project-starter.nix { inherit pkgs; inherit conf; };
         projectStopper = import ./scripts/project-stopper.nix { inherit pkgs; };
         
         # Main CLI tool that imports all other scripts
@@ -36,17 +53,16 @@
           ]}:$PATH"
           
           COMMAND="''${1:-help}"
-          REGISTRY_FILE="$HOME/.lucee-manager/registry.json"
           
           case "$COMMAND" in
             scan|discover)
               PROJECTS_DIR="''${2:-$PWD}"
               echo "Scanning for Lucee projects..."
-              lucee-scan "$PROJECTS_DIR" "$REGISTRY_FILE"
+              lucee-scan "$PROJECTS_DIR" "${conf.reg.path}"
               ;;
               
             list|ls|status)
-              if [[ ! -f "$REGISTRY_FILE" ]]; then
+              if [[ ! -f "${conf.reg.path}" ]]; then
                 echo "No projects found. Run 'lucee-manager scan' first."
                 exit 1
               fi
@@ -63,7 +79,7 @@
                 (if .value.nginxTemplate then "\n    Nginx Template: \(.value.nginxTemplate)" else "\n    Template: default" end) +
                 (if .value.port then "\n    Direct: http://localhost:\(.value.port)" else "" end) +
                 (if .value.port then "\n    Proxy: http://\(.value.domain):8080" else "" end) +
-                "\n"' "$REGISTRY_FILE"
+                "\n"' "${conf.reg.path}"
               ;;
               
             assign-port)
@@ -73,7 +89,7 @@
                 exit 1
               fi
               
-              PORT=$(lucee-port-allocate "$PROJECT_NAME" "$REGISTRY_FILE")
+              PORT=$(lucee-port-allocate "$PROJECT_NAME" "${conf.reg.path}")
               echo "Assigned port $PORT to project '$PROJECT_NAME'"
               echo "Start your Lucee project manually, then run: lucee-manager track $PROJECT_NAME running"
               ;;
@@ -86,7 +102,7 @@
                 exit 1
               fi
               
-              lucee-track-port "$PROJECT_NAME" "$STATUS" "$REGISTRY_FILE"
+              lucee-track-port "$PROJECT_NAME" "$STATUS" "${conf.reg.path}"
               echo "Updated status for '$PROJECT_NAME' to '$STATUS'"
               ;;
               
@@ -94,22 +110,22 @@
               NGINX_COMMAND="''${2:-generate}"
               case "$NGINX_COMMAND" in
                 generate|gen)
-                  lucee-nginx-generate "$REGISTRY_FILE" "$HOME/.lucee-manager/nginx"
+                  lucee-nginx-generate "${conf.reg.path}" "${conf.nginx}"
                   ;;
                 start)
-                  if [[ ! -f "$HOME/.lucee-manager/nginx/start-nginx.sh" ]]; then
+                  if [[ ! -f "${conf.nginx}/start-nginx.sh" ]]; then
                     echo "Nginx config not found. Run 'lucee-manager nginx generate' first."
                     exit 1
                   fi
-                  bash "$HOME/.lucee-manager/nginx/start-nginx.sh"
+                  bash "${conf.nginx}/start-nginx.sh"
                   ;;
                 stop)
-                  bash "$HOME/.lucee-manager/nginx/stop-nginx.sh"
+                  bash "${conf.nginx}/stop-nginx.sh"
                   ;;
                 reload)
                   if [[ -f /tmp/nginx.pid ]]; then
                     echo "Reloading nginx configuration..."
-                     ${pkgs.nginx}/bin/nginx -s reload -c "$HOME/.lucee-manager/nginx/nginx.conf"
+                     ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf"
                     echo "Nginx reloaded."
                   else
                     echo "Nginx not running. Start with 'lucee-manager nginx start'"
@@ -129,7 +145,7 @@
                 exit 1
               fi
               
-              lucee-start-project "$PROJECT_NAME" "$REGISTRY_FILE"
+              lucee-start-project "$PROJECT_NAME" "${conf.reg.path}"
               ;;
               
             stop)
@@ -139,7 +155,7 @@
                 exit 1
               fi
               
-              lucee-stop-project "$PROJECT_NAME" "$REGISTRY_FILE"
+              lucee-stop-project "$PROJECT_NAME" "${conf.reg.path}"
               ;;
               
             help|--help|-h)

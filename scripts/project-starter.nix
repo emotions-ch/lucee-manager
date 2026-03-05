@@ -1,5 +1,5 @@
 # Project starter - comprehensive start command
-{ pkgs }:
+{ pkgs, conf }:
 
 pkgs.writeShellScriptBin "lucee-start-project" ''
   set -euo pipefail
@@ -7,7 +7,6 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   PROJECT_NAME="$1"
   REGISTRY_FILE="$2"
   
-  # Check if project exists in registry
   if [[ ! -f "$REGISTRY_FILE" ]]; then
     echo "Registry not found. Run 'lucee-manager scan' first."
     exit 1
@@ -40,15 +39,15 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   fi
   
   lucee-update-tomcat-config "$PROJECT_PATH" "$PORT"
-  lucee-nginx-generate "$REGISTRY_FILE" "$HOME/.lucee-manager/nginx"
+  lucee-nginx-generate "$REGISTRY_FILE" "${conf.nginx}"
   
   # Step 4: Start nginx if not running
   if ! ${pkgs.procps}/bin/pgrep -f "nginx.*master.*lucee-manager" > /dev/null; then
     echo "  Starting nginx..."
-    bash "$HOME/.lucee-manager/nginx/start-nginx.sh"
+    bash "${conf.nginx}/start-nginx.sh"
   else
     echo "  Nginx already running, reloading configuration..."
-    ${pkgs.nginx}/bin/nginx -s reload -c "$HOME/.lucee-manager/nginx/nginx.conf" 2>/dev/null || true
+    ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf" 2>/dev/null || true
   fi
   
   echo "Updating registry status..."
@@ -59,8 +58,8 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   echo "Running: nix run $PROJECT_PATH"
   
   # Create logs directory
-  mkdir -p "$HOME/.lucee-manager/logs"
-  LOG_FILE="$HOME/.lucee-manager/logs/$PROJECT_NAME.log"
+  mkdir -p "${conf.logs}"
+  LOG_FILE="${conf.logs}/$PROJECT_NAME.log"
   
   # Start Lucee in background and capture PID
   nohup nix run . > "$LOG_FILE" 2>&1 &
@@ -95,6 +94,7 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
     if ! ${pkgs.procps}/bin/ps -p "$NIX_PID" > /dev/null 2>&1; then
       echo "Process $NIX_PID stopped unexpectedly. Check logs: $LOG_FILE"
       lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
+      cat $LOG_FILE | tail -n 5
       exit 1
     fi
     

@@ -28,9 +28,6 @@ pkgs.writeShellScriptBin "lucee-update-tomcat-config" ''
   # Update the HTTP connector port (looking for port="NNNN" in Connector elements)
   ${pkgs.gnused}/bin/sed -i "s/port=\"[0-9]*\" protocol=\"HTTP\/1\.1\"/port=\"$HTTP_PORT\" protocol=\"HTTP\/1.1\"/g" "$SERVER_XML"
   
-  echo "Tomcat configuration updated successfully"
-  
-  # Verify the changes
   echo "Verification:"
   echo "  Server shutdown port: $(${pkgs.gnugrep}/bin/grep -o '<Server port="[0-9]*"' "$SERVER_XML" || echo "Not found")"
   echo "  HTTP connector port: $(${pkgs.gnugrep}/bin/grep -o 'port="[0-9]*" protocol="HTTP/1\.1"' "$SERVER_XML" || echo "Not found")"

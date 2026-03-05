@@ -1,18 +1,14 @@
 # Project scanner - discovers Lucee projects in a directory
-{ pkgs }:
+{ pkgs, conf }:
 
 pkgs.writeShellScriptBin "lucee-scan" ''
   set -euo pipefail
   
   PROJECTS_DIR="''${1:-$PWD}"
-  REGISTRY_FILE="''${2:-$HOME/.lucee-manager/registry.json}"
   
-  # Ensure registry directory exists
-  mkdir -p "$(dirname "$REGISTRY_FILE")"
-  
-  # Initialize registry if it doesn't exist
-  if [[ ! -f "$REGISTRY_FILE" ]]; then
-    echo '{"projects": {}, "lastScan": null, "portRange": {"start": 8100, "end": 8199}}' > "$REGISTRY_FILE"
+  mkdir -p "$(dirname "${conf.reg.path}")"
+  if [[ ! -f "${conf.reg.path}" ]]; then
+    echo '${conf.reg.template}' > "${conf.reg.path}"
   fi
   
   echo "Scanning for Lucee projects in: $PROJECTS_DIR"
@@ -73,10 +69,10 @@ pkgs.writeShellScriptBin "lucee-scan" ''
       
       ABSOLUTE_PATH=$(realpath "$project_dir")
       
-      CURRENT_STATUS=$(${pkgs.jq}/bin/jq -r --arg name "$project_name" '.projects[$name].status // "stopped"' "$REGISTRY_FILE" 2>/dev/null || echo "stopped")
+      CURRENT_STATUS=$(${pkgs.jq}/bin/jq -r --arg name "$project_name" '.projects[$name].status // "stopped"' "${conf.reg.path}" 2>/dev/null || echo "stopped")
       if [[ "$CURRENT_STATUS" == "running" ]]; then
         echo "  -> Project is currently running, stopping before registry update..."
-        lucee-stop-project "$project_name" "$REGISTRY_FILE" || {
+        lucee-stop-project "$project_name" "${conf.reg.path}" || {
           echo "  -> Warning: Failed to stop project, continuing with registry update"
         }
       fi
@@ -95,14 +91,14 @@ pkgs.writeShellScriptBin "lucee-scan" ''
                         (if $template != "" then .projects[$name].nginxTemplate = $template else . end) |
                         .projects[$name] = (.projects[$name] + {status: (.projects[$name].status // "stopped")}) | 
                         .lastScan = $timestamp' \
-                        "$REGISTRY_FILE" > "$REGISTRY_FILE.tmp"
+                        "${conf.reg.path}" > "${conf.reg.path}.tmp"
       
-      mv "$REGISTRY_FILE.tmp" "$REGISTRY_FILE"
+      mv "${conf.reg.path}.tmp" "${conf.reg.path}"
       echo "  -> Added to registry as: $project_name"
     fi
   done
   
   echo ""
   echo "Scan complete. Found projects:"
-  ${pkgs.jq}/bin/jq -r '.projects | keys[]' "$REGISTRY_FILE"
+  ${pkgs.jq}/bin/jq -r '.projects | keys[]' "${conf.reg.path}"
 ''
