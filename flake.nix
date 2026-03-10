@@ -37,6 +37,7 @@
         projectStarter = import ./scripts/project-starter.nix { inherit pkgs; inherit conf; };
         projectStopper = import ./scripts/project-stopper.nix { inherit pkgs; };
         interactive = import ./scripts/interactive.nix { inherit pkgs; inherit conf; };
+        pidValidator = import ./scripts/pid-validator.nix { inherit pkgs; inherit conf; };
 
         # Main CLI tool that imports all other scripts
         luceeManager = pkgs.writeShellScriptBin "lucee-manager" ''
@@ -52,6 +53,7 @@
             projectStarter
             projectStopper
             interactive
+            pidValidator
           ]}:$PATH"
           
           COMMAND="''${1:-interactive}"
@@ -67,6 +69,7 @@
               ;;
               
             list|ls|status)
+              lucee-pid-validate
               if [[ ! -f "${conf.reg.path}" ]]; then
                 echo "No projects found. Run 'lucee-manager scan' first."
                 exit 1
@@ -144,6 +147,7 @@
               ;;
               
             start)
+              lucee-pid-validate
               PROJECT_NAME="''${2:-}"
               if [[ -z "$PROJECT_NAME" ]]; then
                 echo "Usage: lucee-manager start <project-name>"
@@ -154,6 +158,7 @@
               ;;
               
             stop)
+              lucee-pid-validate
               PROJECT_NAME="''${2:-}"
               if [[ -z "$PROJECT_NAME" ]]; then
                 echo "Usage: lucee-manager stop <project-name>"
@@ -189,6 +194,7 @@
           lucee-update-tomcat-config = tomcatConfigUpdater;
           lucee-start-project = projectStarter;
           lucee-stop-project = projectStopper;
+          lucee-pid-validate = pidValidator;
         };
 
         # Development shell
@@ -212,6 +218,7 @@
             projectStarter
             projectStopper
             interactive
+            pidValidator
           ];
 
           shellHook = ''
