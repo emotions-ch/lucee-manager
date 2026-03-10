@@ -10,26 +10,34 @@ pkgs.writeShellScriptBin "lucee-interactive" ''
 
   # Command selection
   COMMAND=$(${pkgs.lib.getExe pkgs.fzf} --prompt="Select a command" <<EOF
-  scan
-  list
-  start
-  stop
-  assign-port
-  track
-  nginx
-  EOF
+scan
+list
+start
+stop
+assign-port
+track
+nginx
+EOF
   )
 
   if [ "$COMMAND" == "nginx" ]; then
     NGINX_COMMAND=$(${pkgs.lib.getExe pkgs.fzf} --prompt="Select an nginx command" <<EOF
-      generate
-      start
-      stop
-      reload
-  EOF
-  )
-  echo $NGINX_COMMAND
-    lucee-manager nginx $NGINX_COMMAND
+generate
+start
+stop
+reload
+set-port
+EOF
+    )
+
+    if [ "$NGINX_COMMAND" == "set-port" ]; then
+      CURRENT_PORT=$(${pkgs.lib.getExe pkgs.jq} -r '.nginxPort // 8080' "${conf.reg.path}")
+      echo "Current nginx port: $CURRENT_PORT"
+      read -p "Enter new port (80 for standard HTTP): " NEW_PORT
+      lucee-manager nginx set-port "$NEW_PORT"
+    else
+      lucee-manager nginx "$NGINX_COMMAND"
+    fi
   else
     PROJECT_COMMANDS=("start" "stop" "assign-port" "track")
     if [[ " ''${PROJECT_COMMANDS[@]} " =~ " ''${COMMAND} " ]]; then

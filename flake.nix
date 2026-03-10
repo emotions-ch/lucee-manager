@@ -24,6 +24,7 @@
                 start = 8100;
                 end = 8199;
               };
+              nginxPort = 8080;
             }}";
           };
         };
@@ -131,7 +132,7 @@
                   bash "${conf.nginx}/stop-nginx.sh"
                   ;;
                 reload)
-                  if [[ -f /tmp/nginx.pid ]]; then
+                  if [[ -f "${conf.logs}/nginx.pid" ]]; then
                     echo "Reloading nginx configuration..."
                      ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf"
                     echo "Nginx reloaded."
@@ -139,8 +140,40 @@
                     echo "Nginx not running. Start with 'lucee-manager nginx start'"
                   fi
                   ;;
+                set-port)
+                  NEW_PORT="''${3:-}"
+                  if [[ -z "$NEW_PORT" ]]; then
+                    CURRENT_PORT=$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")
+                    echo "Current nginx port: $CURRENT_PORT"
+                    echo "Usage: lucee-manager nginx set-port <port>"
+                    exit 1
+                  fi
+
+                  if ! [[ "$NEW_PORT" =~ ^[0-9]+$ ]] || [[ $NEW_PORT -lt 1 || $NEW_PORT -gt 65535 ]]; then
+                    echo "Error: Port must be a number between 1 and 65535"
+                    exit 1
+                  fi
+
+                  if [[ $NEW_PORT -lt 1024 ]]; then
+                    echo "⚠️  Port $NEW_PORT is privileged and will require sudo when starting nginx"
+                    read -p "Continue? (y/N): " -n 1 -r
+                    echo
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                      echo "Operation cancelled."
+                      exit 0
+                    fi
+                  fi
+
+                  # Update registry
+                  TEMP_FILE=$(mktemp)
+                  ${pkgs.jq}/bin/jq --arg port "$NEW_PORT" '.nginxPort = ($port | tonumber)' "${conf.reg.path}" > "$TEMP_FILE"
+                  mv "$TEMP_FILE" "${conf.reg.path}"
+
+                  echo "Nginx port updated to $NEW_PORT"
+                  echo "Run 'lucee-manager nginx generate' to update configuration"
+                  ;;
                 *)
-                  echo "Usage: lucee-manager nginx {generate|start|stop|reload}"
+                  echo "Usage: lucee-manager nginx {generate|start|stop|reload|set-port}"
                   exit 1
                   ;;
               esac
