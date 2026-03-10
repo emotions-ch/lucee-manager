@@ -28,7 +28,8 @@ pkgs.writeShellScriptBin "lucee-interactive" ''
       reload
   EOF
   )
-    lucee-manager nginx "$NGINX_COMMAND"
+  echo $NGINX_COMMAND
+    lucee-manager nginx $NGINX_COMMAND
   else
     PROJECT_COMMANDS=("start" "stop" "assign-port" "track")
     if [[ " ''${PROJECT_COMMANDS[@]} " =~ " ''${COMMAND} " ]]; then

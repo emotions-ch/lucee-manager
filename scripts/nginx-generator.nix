@@ -13,7 +13,6 @@ pkgs.writeShellScriptBin "lucee-nginx-generate" ''
   
   echo "Generating nginx configuration for Lucee reverse proxy..."
   
-  # Generate main nginx.conf
   cp -f --no-preserve=mode ${./templates/nginx/nginx.conf} ${conf.nginx}/nginx.conf
 
   # Generate individual site configurations
@@ -52,7 +51,7 @@ pkgs.writeShellScriptBin "lucee-nginx-generate" ''
   # Generate start script
   cat > "${conf.nginx}/start-nginx.sh" <<EOF
     #!/bin/bash
-    if [[ -f /tmp/nginx.pid ]]; then
+    if [[ -f /tmp/nginx.pid ]] && ps -p $(cat /tmp/nginx.pid) > /dev/null; then
       echo "Nginx is already running (PID: \$(cat /tmp/nginx.pid))"
       exit 0
     fi
