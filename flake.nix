@@ -36,6 +36,7 @@
         tomcatConfigUpdater = import ./scripts/tomcat-config-updater.nix { inherit pkgs; };
         projectStarter = import ./scripts/project-starter.nix { inherit pkgs; inherit conf; };
         projectStopper = import ./scripts/project-stopper.nix { inherit pkgs; };
+        interactive = import ./scripts/interactive.nix { inherit pkgs; inherit conf; };
 
         # Main CLI tool that imports all other scripts
         luceeManager = pkgs.writeShellScriptBin "lucee-manager" ''
@@ -50,11 +51,15 @@
             tomcatConfigUpdater
             projectStarter
             projectStopper
+            interactive
           ]}:$PATH"
           
-          COMMAND="''${1:-help}"
+          COMMAND="''${1:-interactive}"
           
           case "$COMMAND" in
+            interactive)
+              lucee-interactive
+              ;;
             scan|discover)
               PROJECTS_DIR="''${2:-$PWD}"
               echo "Scanning for Lucee projects..."
@@ -176,6 +181,7 @@
         packages = {
           default = luceeManager;
           lucee-manager = luceeManager;
+          lucee-interactive = interactive;
           lucee-scan = projectScanner;
           lucee-port-allocate = portAllocator;
           lucee-track-port = portTracker;
@@ -205,12 +211,14 @@
             tomcatConfigUpdater
             projectStarter
             projectStopper
+            interactive
           ];
 
           shellHook = ''
             echo "Lucee Reverse Proxy Manager"
             echo "=========================="
             echo "Available commands:"
+            echo "  lucee-manager"
             echo "  lucee-manager help"
             echo "  lucee-manager scan"
             echo "  lucee-manager start <project>"
