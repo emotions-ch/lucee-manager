@@ -78,7 +78,7 @@
               
               echo "Lucee Projects (managed by reverse proxy):"
               echo "=========================================="
-              ${pkgs.jq}/bin/jq -r '.projects | to_entries[] | 
+              ${pkgs.jq}/bin/jq --arg NGINX_PORT "$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")" -r '.projects | to_entries[] |
                 "  \(.key):" + 
                 "\n    Port: \(.value.port // "not assigned")" + 
                 "\n    Status: \(.value.status // "unknown")" + 
@@ -87,7 +87,7 @@
                 "\n    Path: \(.value.path)" + 
                 (if .value.nginxTemplate then "\n    Nginx Template: \(.value.nginxTemplate)" else "\n    Template: default" end) +
                 (if .value.port then "\n    Direct: http://localhost:\(.value.port)" else "" end) +
-                (if .value.port then "\n    Proxy: http://\(.value.domain):8080" else "" end) +
+                (if .value.port then "\n    Proxy: http://\(.value.domain):\($NGINX_PORT)" else "" end) +
                 "\n"' "${conf.reg.path}"
               ;;
               

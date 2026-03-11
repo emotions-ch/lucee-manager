@@ -22,12 +22,10 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   echo "Starting Lucee project: $PROJECT_NAME"
   echo "Project path: $PROJECT_PATH"
   
-  # Convert relative path to absolute
   if [[ ! "$PROJECT_PATH" =~ ^/ ]]; then
     PROJECT_PATH="$PWD/$PROJECT_PATH"
   fi
   
-  #Assign port if not already assigned
   CURRENT_PORT=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].port // empty' "$REGISTRY_FILE")
   if [[ -z "$CURRENT_PORT" || "$CURRENT_PORT" == "null" ]]; then
     echo "Assigning port..."
@@ -41,7 +39,6 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   lucee-update-tomcat-config "$PROJECT_PATH" "$PORT"
   lucee-nginx-generate "$REGISTRY_FILE" "${conf.nginx}"
   
-  # Step 4: Start nginx if not running
   if ! ${pkgs.procps}/bin/pgrep -f "nginx.*master.*lucee-manager" > /dev/null; then
     echo "  Starting nginx..."
     bash "${conf.nginx}/start-nginx.sh"
@@ -55,18 +52,16 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   
   cd "$PROJECT_PATH"
   
-  echo "Running: nix run $PROJECT_PATH"
-  
-  # Create logs directory
   mkdir -p "${conf.logs}"
   LOG_FILE="${conf.logs}/$PROJECT_NAME.log"
   
   # Start Lucee in background and capture PID
+  echo "Running: nix run $PROJECT_PATH"
   nohup nix run . > "$LOG_FILE" 2>&1 &
   NIX_PID=$!
   
-  # Get project info for final message
   DOMAIN=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].domain' "$REGISTRY_FILE")
+  NGINX_PORT=$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")
 
   echo ""
   echo "==================== Lucee Project Starting ===================="
@@ -75,22 +70,19 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   echo "Domain: $DOMAIN"
   echo "PID: $NIX_PID"
   echo "Direct access: http://localhost:$PORT"
-  echo "Proxy access: http://$DOMAIN:8080"
+  echo "Proxy access: http://$DOMAIN:$NGINX_PORT"
   echo "Logs: $LOG_FILE"
   echo "=============================================================="
   echo ""
   
-  # Wait for the service to be ready and update status with PID
   echo "Waiting for Lucee to start..."
   for i in {1..30}; do
     if ${pkgs.nettools}/bin/netstat -tuln 2>/dev/null | grep -q ":$PORT "; then
-      echo "Lucee is ready!"
       lucee-track-port "$PROJECT_NAME" "running" "$REGISTRY_FILE" "$NIX_PID"
       echo "Project '$PROJECT_NAME' is now running in background."
       exit 0
     fi
     
-    # Check if process is still running
     if ! ${pkgs.procps}/bin/ps -p "$NIX_PID" > /dev/null 2>&1; then
       echo "Process $NIX_PID stopped unexpectedly. Check logs: $LOG_FILE"
       lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
@@ -101,8 +93,7 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
     sleep 2
   done
   
-  # If we get here, timeout occurred
   echo "Timeout waiting for Lucee to start on port $PORT"
   echo "Process PID $NIX_PID may still be starting. Check logs: $LOG_FILE"
-  echo "Run 'lucee-manager list' to check status"
+  echo "Run 'lucee-manager ls' to check status"
 ''
