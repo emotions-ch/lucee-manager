@@ -79,7 +79,6 @@ pkgs.writeShellScriptBin "lucee-nginx-generate" ''
 
     if [[ -f "${conf.logs}/nginx.pid" ]]; then
       echo "Nginx started successfully (PID: \$(cat "${conf.logs}/nginx.pid"))"
-      echo "Access your projects via: http://project-domain:$NGINX_PORT"
     else
       echo "Failed to start nginx"
       exit 1
