@@ -134,7 +134,16 @@
                 reload)
                   if [[ -f "${conf.logs}/nginx.pid" ]]; then
                     echo "Reloading nginx configuration..."
-                     ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf"
+
+                    # Check if sudo is needed for nginx operations
+                    NGINX_PORT=$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")
+                    NEEDS_SUDO=""
+                    if [[ $NGINX_PORT -lt 1024 && $EUID -ne 0 ]]; then
+                      NEEDS_SUDO="sudo"
+                      echo "⚠️  Port $NGINX_PORT requires root privileges. You may be prompted for your password."
+                    fi
+
+                    $NEEDS_SUDO ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf"
                     echo "Nginx reloaded."
                   else
                     echo "Nginx not running. Start with 'lucee-manager nginx start'"

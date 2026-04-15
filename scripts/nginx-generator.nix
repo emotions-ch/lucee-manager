@@ -14,7 +14,6 @@ pkgs.writeShellScriptBin "lucee-nginx-generate" ''
 
   echo "Generating nginx configuration for Lucee reverse proxy..."
 
-  # Read nginx port from registry, default to 8080 if not set
   NGINX_PORT=$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")
 
   NEEDS_SUDO=""

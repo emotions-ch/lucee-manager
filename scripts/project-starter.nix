@@ -44,7 +44,15 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
     bash "${conf.nginx}/start-nginx.sh"
   else
     echo "  Nginx already running, reloading configuration..."
-    ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf" 2>/dev/null || true
+
+    # Check if sudo is needed for nginx operations
+    NGINX_PORT=$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")
+    NEEDS_SUDO=""
+    if [[ $NGINX_PORT -lt 1024 && $EUID -ne 0 ]]; then
+      NEEDS_SUDO="sudo"
+    fi
+
+    $NEEDS_SUDO ${pkgs.nginx}/bin/nginx -s reload -c "${conf.nginx}/nginx.conf" 2>/dev/null || true
   fi
   
   echo "Updating registry status..."
