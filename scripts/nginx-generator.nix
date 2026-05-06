@@ -3,12 +3,12 @@
 
 pkgs.writeShellScriptBin "lucee-nginx-generate" ''
   set -euo pipefail
-  
+
   if [[ ! -f "${conf.reg.path}" ]]; then
     echo "Registry not found. Run 'lucee-scan' first."
     exit 1
   fi
-  
+
   mkdir -p "${conf.nginx}/sites"
   mkdir -p "${conf.logs}"
 

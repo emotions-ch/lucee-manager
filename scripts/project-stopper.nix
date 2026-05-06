@@ -3,23 +3,23 @@
 
 pkgs.writeShellScriptBin "lucee-stop-project" ''
   set -euo pipefail
-  
+
   PROJECT_NAME="$1"
   REGISTRY_FILE="$2"
-  
+
   # Check if project exists in registry
   if [[ ! -f "$REGISTRY_FILE" ]]; then
     echo "Registry not found."
     exit 1
   fi
-  
+
   # Get project info
   PID=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].pid // empty' "$REGISTRY_FILE")
   STATUS=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].status // empty' "$REGISTRY_FILE")
   PORT=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].port // empty' "$REGISTRY_FILE")
-  
+
   echo "Stopping Lucee project: $PROJECT_NAME"
-  
+
   # Function to kill process tree
   kill_process_tree() {
     local pid=$1
@@ -30,7 +30,7 @@ pkgs.writeShellScriptBin "lucee-stop-project" ''
     ${pkgs.procps}/bin/pkill -$signal -P "$pid" 2>/dev/null || true
     ${pkgs.coreutils}/bin/kill -$signal "$pid" 2>/dev/null || true
   }
-  
+
   # Function to find Java processes on the project's port
   find_java_processes_on_port() {
     if [[ -n "$PORT" ]]; then
@@ -52,9 +52,9 @@ pkgs.writeShellScriptBin "lucee-stop-project" ''
       fi
     fi
   }
-  
+
   PROCESSES_KILLED=false
-  
+
   # Try to kill using stored PID first
   if [[ -n "$PID" ]]; then
     echo "Attempting to stop using stored PID: $PID"
@@ -85,7 +85,7 @@ pkgs.writeShellScriptBin "lucee-stop-project" ''
       echo "Stored PID $PID is not running."
     fi
   fi
-  
+
   # If PID method didn't work, find processes by port
   if ! $PROCESSES_KILLED; then
     echo "Searching for processes by port..."
@@ -133,10 +133,10 @@ pkgs.writeShellScriptBin "lucee-stop-project" ''
       PROCESSES_KILLED=true
     fi
   fi
-  
+
   # Update registry status
   lucee-track-port "$PROJECT_NAME" "stopped" "$REGISTRY_FILE"
-  
+
   if $PROCESSES_KILLED; then
     echo "Project '$PROJECT_NAME' stopped successfully."
   else

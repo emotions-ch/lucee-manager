@@ -6,8 +6,14 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
@@ -30,35 +36,58 @@
         };
 
         # Import all our scripts
-        projectScanner = import ./scripts/project-scanner.nix { inherit pkgs; inherit conf; };
-        portAllocator = import ./scripts/port-allocator.nix { inherit pkgs; inherit conf; };
-        portTracker = import ./scripts/port-tracker.nix { inherit pkgs; inherit conf; };
-        nginxGenerator = import ./scripts/nginx-generator.nix { inherit pkgs; inherit conf; };
+        projectScanner = import ./scripts/project-scanner.nix {
+          inherit pkgs;
+          inherit conf;
+        };
+        portAllocator = import ./scripts/port-allocator.nix {
+          inherit pkgs;
+          inherit conf;
+        };
+        portTracker = import ./scripts/port-tracker.nix {
+          inherit pkgs;
+          inherit conf;
+        };
+        nginxGenerator = import ./scripts/nginx-generator.nix {
+          inherit pkgs;
+          inherit conf;
+        };
         tomcatConfigUpdater = import ./scripts/tomcat-config-updater.nix { inherit pkgs; };
-        projectStarter = import ./scripts/project-starter.nix { inherit pkgs; inherit conf; };
+        projectStarter = import ./scripts/project-starter.nix {
+          inherit pkgs;
+          inherit conf;
+        };
         projectStopper = import ./scripts/project-stopper.nix { inherit pkgs; };
-        interactive = import ./scripts/interactive.nix { inherit pkgs; inherit conf; };
-        pidValidator = import ./scripts/pid-validator.nix { inherit pkgs; inherit conf; };
+        interactive = import ./scripts/interactive.nix {
+          inherit pkgs;
+          inherit conf;
+        };
+        pidValidator = import ./scripts/pid-validator.nix {
+          inherit pkgs;
+          inherit conf;
+        };
 
         # Main CLI tool that imports all other scripts
         luceeManager = pkgs.writeShellScriptBin "lucee-manager" ''
           set -euo pipefail
-          
+
           # Add our tools to PATH
-          export PATH="${pkgs.lib.makeBinPath [
-            projectScanner
-            portAllocator
-            portTracker
-            nginxGenerator
-            tomcatConfigUpdater
-            projectStarter
-            projectStopper
-            interactive
-            pidValidator
-          ]}:$PATH"
-          
+          export PATH="${
+            pkgs.lib.makeBinPath [
+              projectScanner
+              portAllocator
+              portTracker
+              nginxGenerator
+              tomcatConfigUpdater
+              projectStarter
+              projectStopper
+              interactive
+              pidValidator
+            ]
+          }:$PATH"
+
           COMMAND="''${1:-interactive}"
-          
+
           case "$COMMAND" in
             interactive)
               lucee-interactive
@@ -240,6 +269,8 @@
 
       in
       {
+        formatter = nixpkgs.legacyPackages.${system}.nixfmt-tree;
+
         # Packages
         packages = {
           default = luceeManager;

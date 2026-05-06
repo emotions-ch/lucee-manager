@@ -3,16 +3,16 @@
 
 pkgs.writeShellScriptBin "lucee-scan" ''
   set -euo pipefail
-  
+
   PROJECTS_DIR="''${1:-$PWD}"
-  
+
   mkdir -p "$(dirname "${conf.reg.path}")"
   if [[ ! -f "${conf.reg.path}" ]]; then
     echo '${conf.reg.template}' > "${conf.reg.path}"
   fi
-  
+
   echo "Scanning for Lucee projects in: $PROJECTS_DIR"
-  
+
   # Find all directories with flake.nix containing lucee-nix
   find "$PROJECTS_DIR" -maxdepth 2 -name "flake.nix" -exec grep -l "lucee-nix" {} \; | while read -r flake_file; do
     project_dir="$(dirname "$flake_file")"
@@ -97,7 +97,7 @@ pkgs.writeShellScriptBin "lucee-scan" ''
       echo "  -> Added to registry as: $project_name"
     fi
   done
-  
+
   echo ""
   echo "Scan complete. Found projects:"
   ${pkgs.jq}/bin/jq -r '.projects | keys[]' "${conf.reg.path}"

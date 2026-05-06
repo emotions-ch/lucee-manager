@@ -3,28 +3,28 @@
 
 pkgs.writeShellScriptBin "lucee-port-allocate" ''
   set -euo pipefail
-  
+
   PROJECT_NAME="$1"
-  
+
   if [[ ! -f "${conf.reg.path}" ]]; then
     echo "Registry not found. Run 'lucee-scan' first."
     exit 1
   fi
-  
+
   # Check if project already has a port
   EXISTING_PORT=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].port // empty' "${conf.reg.path}")
   if [[ -n "$EXISTING_PORT" ]]; then
     echo "$EXISTING_PORT"
     exit 0
   fi
-  
+
   # Get port range from registry
   PORT_START=$(${pkgs.jq}/bin/jq -r '.portRange.start' "${conf.reg.path}")
   PORT_END=$(${pkgs.jq}/bin/jq -r '.portRange.end' "${conf.reg.path}")
-  
+
   # Get all assigned ports
   ASSIGNED_PORTS=$(${pkgs.jq}/bin/jq -r '[.projects[].port // empty] | map(select(. != "")) | sort | .[]' "${conf.reg.path}")
-  
+
   # Find the first available port
   for ((port=PORT_START; port<=PORT_END; port++)); do
     PORT_IN_USE=false
@@ -55,7 +55,7 @@ pkgs.writeShellScriptBin "lucee-port-allocate" ''
       exit 0
     fi
   done
-  
+
   echo "No available ports in range $PORT_START-$PORT_END"
   exit 1
 ''

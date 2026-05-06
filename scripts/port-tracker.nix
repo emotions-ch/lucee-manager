@@ -3,16 +3,16 @@
 
 pkgs.writeShellScriptBin "lucee-track-port" ''
   set -euo pipefail
-  
+
   PROJECT_NAME="$1"
   ACTION="''${2:-running}"  # running, starting, stopped
   PID="''${4:-}"  # Optional PID for running status
-  
+
   if [[ ! -f "${conf.reg.path}" ]]; then
     echo "Registry not found."
     exit 1
   fi
-  
+
   case "$ACTION" in
     running)
       if [[ -n "$PID" ]]; then
@@ -44,6 +44,6 @@ pkgs.writeShellScriptBin "lucee-track-port" ''
       exit 1
       ;;
   esac
-  
+
   mv "${conf.reg.path}.tmp" "${conf.reg.path}"
 ''
