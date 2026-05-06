@@ -38,6 +38,13 @@ EOF
     else
       lucee-manager nginx "$NGINX_COMMAND"
     fi
+  elif [ "$COMMAND" == "list" ]; then
+    PROJECT_NAME=$( ( echo "<all projects>"; ${pkgs.lib.getExe pkgs.jq} -r '.projects | keys[]' "${conf.reg.path}" ) | ${pkgs.lib.getExe pkgs.fzf} --prompt="Filter by project")
+    if [ "$PROJECT_NAME" == "<all projects>" ]; then
+      lucee-manager list
+    else
+      lucee-manager list "$PROJECT_NAME"
+    fi
   else
     PROJECT_COMMANDS=("start" "stop" "assign-port" "track")
     if [[ " ''${PROJECT_COMMANDS[@]} " =~ " ''${COMMAND} " ]]; then

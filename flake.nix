@@ -75,16 +75,32 @@
                 echo "No projects found. Run 'lucee-manager scan' first."
                 exit 1
               fi
-              
-              echo "Lucee Projects (managed by reverse proxy):"
-              echo "=========================================="
-              ${pkgs.jq}/bin/jq --arg NGINX_PORT "$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")" -r '.projects | to_entries[] |
-                "  \(.key):" + 
-                "\n    Port: \(.value.port // "not assigned")" + 
-                "\n    Status: \(.value.status // "unknown")" + 
+
+              PROJECT_FILTER="''${2:-}"
+
+              if [[ -n "$PROJECT_FILTER" ]]; then
+                if ! ${pkgs.jq}/bin/jq -e --arg name "$PROJECT_FILTER" '.projects | has($name)' "${conf.reg.path}" > /dev/null; then
+                  echo "Project '$PROJECT_FILTER' not found in registry."
+                  exit 1
+                fi
+                echo "Lucee Project: $PROJECT_FILTER"
+                echo "=========================================="
+              else
+                echo "Lucee Projects (managed by reverse proxy):"
+                echo "=========================================="
+              fi
+
+              ${pkgs.jq}/bin/jq \
+                --arg NGINX_PORT "$(${pkgs.jq}/bin/jq -r '.nginxPort // 8080' "${conf.reg.path}")" \
+                --arg FILTER "$PROJECT_FILTER" \
+                -r '.projects | to_entries[] |
+                select($FILTER == "" or .key == $FILTER) |
+                "  \(.key):" +
+                "\n    Port: \(.value.port // "not assigned")" +
+                "\n    Status: \(.value.status // "unknown")" +
                 (if .value.pid then "\n    PID: \(.value.pid)" else "" end) +
-                "\n    Domain: \(.value.domain)" + 
-                "\n    Path: \(.value.path)" + 
+                "\n    Domain: \(.value.domain)" +
+                "\n    Path: \(.value.path)" +
                 (if .value.nginxTemplate then "\n    Nginx Template: \(.value.nginxTemplate)" else "\n    Template: default" end) +
                 (if .value.port then "\n    Direct: http://localhost:\(.value.port)" else "" end) +
                 (if .value.port then "\n    Proxy: http://\(.value.domain):\($NGINX_PORT)" else "" end) +
