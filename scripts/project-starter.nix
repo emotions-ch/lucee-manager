@@ -6,6 +6,7 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
 
   PROJECT_NAME="$1"
   REGISTRY_FILE="$2"
+  FLAKE_OUTPUT="''${3:-}"
 
   if [[ ! -f "$REGISTRY_FILE" ]]; then
     echo "Registry not found. Run 'lucee-manager scan' first."
@@ -64,8 +65,12 @@ pkgs.writeShellScriptBin "lucee-start-project" ''
   LOG_FILE="${conf.logs}/$PROJECT_NAME.log"
 
   # Start Lucee in background and capture PID
-  echo "Running: nix run $PROJECT_PATH"
-  nohup nix run . > "$LOG_FILE" 2>&1 &
+  INSTALLABLE="."
+  if [[ -n "$FLAKE_OUTPUT" ]]; then
+    INSTALLABLE=".#$FLAKE_OUTPUT"
+  fi
+  echo "Running: nix run $INSTALLABLE ($PROJECT_PATH)"
+  nohup nix run "$INSTALLABLE" > "$LOG_FILE" 2>&1 &
   NIX_PID=$!
 
   DOMAIN=$(${pkgs.jq}/bin/jq -r --arg name "$PROJECT_NAME" '.projects[$name].domain' "$REGISTRY_FILE")

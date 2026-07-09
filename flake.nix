@@ -97,7 +97,7 @@
               echo "Scanning for Lucee projects..."
               lucee-scan "$PROJECTS_DIR" "${conf.reg.path}"
               ;;
-              
+
             list|ls|status)
               lucee-pid-validate
               if [[ ! -f "${conf.reg.path}" ]]; then
@@ -135,19 +135,19 @@
                 (if .value.port then "\n    Proxy: http://\(.value.domain):\($NGINX_PORT)" else "" end) +
                 "\n"' "${conf.reg.path}"
               ;;
-              
+
             assign-port)
               PROJECT_NAME="''${2:-}"
               if [[ -z "$PROJECT_NAME" ]]; then
                 echo "Usage: lucee-manager assign-port <project-name>"
                 exit 1
               fi
-              
+
               PORT=$(lucee-port-allocate "$PROJECT_NAME" "${conf.reg.path}")
               echo "Assigned port $PORT to project '$PROJECT_NAME'"
               echo "Start your Lucee project manually, then run: lucee-manager track $PROJECT_NAME running"
               ;;
-              
+
             track)
               PROJECT_NAME="''${2:-}"
               STATUS="''${3:-running}"
@@ -155,11 +155,11 @@
                 echo "Usage: lucee-manager track <project-name> [running|stopped]"
                 exit 1
               fi
-              
+
               lucee-track-port "$PROJECT_NAME" "$STATUS" "${conf.reg.path}"
               echo "Updated status for '$PROJECT_NAME' to '$STATUS'"
               ;;
-              
+
             nginx)
               NGINX_COMMAND="''${2:-generate}"
               case "$NGINX_COMMAND" in
@@ -232,18 +232,27 @@
                   ;;
               esac
               ;;
-              
+
             start)
               lucee-pid-validate
               PROJECT_NAME="''${2:-}"
               if [[ -z "$PROJECT_NAME" ]]; then
-                echo "Usage: lucee-manager start <project-name>"
+                echo "Usage: lucee-manager start <project-name> [-o <flake-output>]"
                 exit 1
               fi
-              
-              lucee-start-project "$PROJECT_NAME" "${conf.reg.path}"
+
+              FLAKE_OUTPUT=""
+              if [[ "''${3:-}" == "-o" ]]; then
+                FLAKE_OUTPUT="''${4:-}"
+                if [[ -z "$FLAKE_OUTPUT" ]]; then
+                  echo "Usage: lucee-manager start <project-name> [-o <flake-output>]"
+                  exit 1
+                fi
+              fi
+
+              lucee-start-project "$PROJECT_NAME" "${conf.reg.path}" "$FLAKE_OUTPUT"
               ;;
-              
+
             stop)
               lucee-pid-validate
               PROJECT_NAME="''${2:-}"
@@ -251,14 +260,14 @@
                 echo "Usage: lucee-manager stop <project-name>"
                 exit 1
               fi
-              
+
               lucee-stop-project "$PROJECT_NAME" "${conf.reg.path}"
               ;;
-              
+
             help|--help|-h)
               ${pkgs.lib.getExe pkgs.glow} ${./README.md}
               ;;
-              
+
             *)
               echo "Unknown command: $COMMAND"
               echo "Run 'lucee-manager help' for usage information."
