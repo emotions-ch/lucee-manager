@@ -26,6 +26,7 @@ pkgs.writeShellScriptBin "lucee-scan" ''
       
       # Check for lucee-manager.json configuration
       CONFIG_FILE="$project_dir/lucee-instance/conf/lucee-manager.json"
+      NGINX_TEMPLATE=""
       if [[ -f "$CONFIG_FILE" ]]; then
         echo "  -> Found lucee-manager.json configuration"
         
